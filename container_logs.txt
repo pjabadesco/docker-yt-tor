@@ -1,0 +1,15 @@
+Starting session 1
+Session 1: Starting YouTube automation
+Session 1: Requesting new Tor identity.
+Session 1: New Tor identity requested.
+^C^C^C^C^C^C^C^C^C^C^C^C^C^C^C^C^C^CSession 1 9001: Getting Tor IP...
+^C^C^C^CSession 1: Current Tor IP is 193.189.100.204
+Session 1: Unique IP acquired: 193.189.100.204
+Session 1: Using unique Tor IP: 193.189.100.204
+Error running sessions: Failed to launch the browser process!
+rosetta error: failed to open elf at /lib64/ld-linux-x86-64.so.2
+ 
+
+
+TROUBLESHOOTING: https://pptr.dev/troubleshooting
+
