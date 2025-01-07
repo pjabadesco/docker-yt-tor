@@ -1,15 +1,3 @@
-# Create a new Buildx builder with the docker-container driver
-
-    docker buildx create --name mybuilder --use --driver docker-container
-
-# Inspect the builder to ensure it’s ready
-
-    docker buildx inspect --bootstrap
-
-# Build for multi platform
-
-    docker buildx build --platform=linux/amd64,linux/arm64 --tag=pjabadesco/docker-yt-tor:latest --push .
-
 # Build for single platform
 
     docker buildx build --platform=linux/amd64 --tag=docker-yt-tor:latest --load .
