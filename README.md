@@ -35,7 +35,7 @@
     -e RERUN_TIMES=10 \
     -e TOR_POOL_SIZE=10 \
     -v $(pwd)/screenshots:/usr/src/app/screenshots \
-    docker-yt-tor
+    pjabadesco/docker-yt-tor
 
     TOR_HOST=192.168.100.171 TOR_CONTROL_PASSWORD=abadesco node script.js
 
