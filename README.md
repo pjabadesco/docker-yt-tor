@@ -26,6 +26,9 @@
 
 # RUN
 
+    create multiple tor instances:
+    https://github.com/pjabadesco/docker-tor
+
     docker run -it --rm \
     -e TOR_HOST=192.168.100.171 \
     -e TOR_CONTROL_BASE_PORT=7001 \
