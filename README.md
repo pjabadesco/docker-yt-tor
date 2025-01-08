@@ -24,6 +24,12 @@
     cd ./tor-image && ./tor_create.sh 10 && cd ..
     node script.js
 
+    https://bot.sannysoft.com/
+    https://github.com/MShawon/YouTube-Viewer
+
+    docker run -it --rm -v $(pwd):/usr/src/app docker-yt-tor bash
+        
+
 # RUN
 
     bash run.sh

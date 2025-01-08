@@ -6,7 +6,7 @@ docker run -it --rm \
     -e TOR_PROXY_BASE_PORT=9001 \
     -e TOR_CONTROL_PASSWORD=abadesco \
     -e YOUTUBE_URL="https://www.youtube.com/watch?v=BPydARoYxa4" \
-    -e RERUN_TIMES=10 \
+    -e RERUN_TIMES=100 \
     -e TOR_POOL_SIZE=10 \
     -e WATCH_TIME_SEC=50 \
     -v $(pwd)/screenshots:/usr/src/app/screenshots \
