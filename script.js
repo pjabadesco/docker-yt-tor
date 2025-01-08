@@ -3,7 +3,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const TorControl = require('tor-control');
 const axios = require('axios');
 const { SocksProxyAgent } = require('socks-proxy-agent');
-const { faker } = require('@faker-js/faker');
+// const { faker } = require('@faker-js/faker');
 
 // Add the stealth plugin to Puppeteer Extra
 puppeteer.use(StealthPlugin());
@@ -19,7 +19,7 @@ const YOUTUBE_CHANNEL_URL = String(process.env.YOUTUBE_CHANNEL_URL) || 'https://
 const YOUTUBE_URL = String(process.env.YOUTUBE_URL) || 'https://www.youtube.com/watch?v=BPydARoYxa4';
 const RERUN_TIMES = parseInt(process.env.RERUN_TIMES, 10) || 10;
 const TOR_POOL_SIZE = parseInt(process.env.TOR_POOL_SIZE, 10) || 10; // Number of Tor instances in the pool
-const WATCH_TIME_SEC = parseInt(process.env.WATCH_TIME_SEC, 50) || 10; // Number of Tor instances in the pool
+const WATCH_TIME_SEC = parseInt(process.env.WATCH_TIME_SEC, 10) || 50; // Number of Tor instances in the pool
 
 // Create a pool of Tor instances
 const torInstances = Array.from({ length: TOR_POOL_SIZE }, (_, index) => ({
@@ -79,7 +79,7 @@ function requestNewTorIdentity(torInstance, sessionId) {
 // Get current Tor IP
 async function getTorIp(torInstance, sessionId) {
     try {
-        console.log(`Session ${sessionId} ${torInstance.proxyPort}: Getting Tor IP...`);
+        // console.log(`Session ${sessionId} ${torInstance.proxyPort}: Getting Tor IP...`);
 
         // Construct the SOCKS5 proxy URL
         const proxyUrl = `socks5h://${TOR_HOST}:${torInstance.proxyPort}`;
@@ -93,10 +93,10 @@ async function getTorIp(torInstance, sessionId) {
         });
 
         const torIp = response.data.ip;
-        console.log(`Session ${sessionId}: Current Tor IP is ${torIp}`);
+        // console.log(`Session ${sessionId}: Current Tor IP is ${torIp}`);
         return torIp;
     } catch (error) {
-        console.error(`Session ${sessionId}: Failed to get Tor IP: ${error.message}`);
+        // console.error(`Session ${sessionId}: Failed to get Tor IP: ${error.message}`);
         return sessionId + '.0.0.' + Math.floor(Math.random() * 254); // Return a default IP
     }
 }
@@ -116,120 +116,169 @@ async function enableNetworkThrottling(page) {
 
 // Set YouTube video quality to the lowest
 async function setLowestVideoQuality(page, sessionId) {
-    // Open the settings menu and select the lowest video quality
-    await page.evaluate(() => {
+    // console.log(`Session ${sessionId}: Setting lowest video quality...`);
+
+    try {
         // Open the settings menu
-        const settingsButton = document.querySelector('.ytp-settings-button');
+        const settingsButton = await page.$('.ytp-settings-button');
         if (settingsButton) {
-            settingsButton.click();
+            await settingsButton.click();
         } else {
             console.log(`Session ${sessionId}: Settings button not found.`);
             return;
         }
 
-        // Function to delay execution
-        const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        // Wait for the settings menu to render
+        await page.waitForSelector('.ytp-menuitem', { timeout: 5000 });
 
-        // Wait for the Quality option and select it
-        delay(500).then(() => async () => {
-            const qualityMenuItem = Array.from(document.querySelectorAll('.ytp-menuitem'))
-                .find((el) => el.textContent.trim() === 'Quality');
-            if (qualityMenuItem) {
-                qualityMenuItem.click();
-            } else {
-                console.log('Quality menu item not found.');
-                await takeScreenshot(page, `${sessionId}-error-setLowestVideoQuality.png`);
-                return;
-            }
-
-            // Wait for the quality options to load and select the lowest quality
-            delay(500).then(() => async () => {
-                const qualityOptions = Array.from(document.querySelectorAll('.ytp-menuitem'));
-                if (qualityOptions.length > 0) {
-                    // Select the last option in the list (lowest quality)
-                    qualityOptions[qualityOptions.length - 1].click();
-                    console.log('Lowest video quality selected.');
-                } else {
-                    console.log('Quality options not found.');
-                    await takeScreenshot(page, `${sessionId}-error-setLowestVideoQuality.png`);
-                }
-            });
+        // Debug all menu items
+        const menuItems = await page.evaluate(() => {
+            return Array.from(document.querySelectorAll('.ytp-menuitem')).map((el) => el.textContent.trim());
         });
-    });
+        // console.log(`Session ${sessionId}: Available menu items:`, menuItems);
+
+        // Find and click the "Quality" menu item dynamically
+        const qualityMenuItem = await page.evaluateHandle(() => {
+            const items = Array.from(document.querySelectorAll('.ytp-menuitem'));
+            return items.find((el) => el.textContent.trim().toLowerCase().includes('quality'));
+        });
+
+        if (qualityMenuItem) {
+            // console.log(`Session ${sessionId}: Clicking the Quality option...`);
+            await qualityMenuItem.click();
+        } else {
+            console.log(`Session ${sessionId}: Quality menu item not found.`);
+            await takeScreenshot(page, `${sessionId}-error-setLowestVideoQuality.png`);
+            return;
+        }
+
+        // Wait for the quality options menu to render
+        await page.waitForSelector('.ytp-panel-menu .ytp-menuitem', { timeout: 5000 });
+
+        // Get all quality options, excluding "Auto"
+        const qualityOptions = await page.evaluate(() => {
+            return Array.from(document.querySelectorAll('.ytp-panel-menu .ytp-menuitem'))
+                .map((el, index) => ({
+                    text: el.textContent.trim(),
+                    index: index,
+                }))
+                .filter(option => !option.text.toLowerCase().includes('auto')); // Exclude "Auto"
+        });
+
+        if (qualityOptions && qualityOptions.length > 0) {
+            // console.log(`Session ${sessionId}: Quality options available:`, qualityOptions);
+
+            // Select the lowest quality option (last in the list)
+            // console.log(`Session ${sessionId}: Selecting the lowest video quality...`);
+            await page.evaluate((options) => {
+                const lowestQuality = options[options.length - 1];
+                document.querySelectorAll('.ytp-panel-menu .ytp-menuitem')[lowestQuality.index].click();
+            }, qualityOptions);
+            // console log the value of the lowest quality selected
+            console.log(`Session ${sessionId}: Lowest video quality selected: ${qualityOptions[qualityOptions.length - 1].text}`);
+        } else {
+            console.log(`Session ${sessionId}: Quality options not found.`);
+            await takeScreenshot(page, `${sessionId}-error-setLowestVideoQuality.png`);
+        }
+    } catch (error) {
+        console.error(`Session ${sessionId}: Error setting lowest video quality:`, error.message);
+    }
 }
 
-async function checkForSignInPrompt(page, browser) {
-    console.log('Checking for "Sign in to confirm you’re not a bot" prompt...');
+async function checkForSignInPrompt(page, sessionId) {
+    if (!page || typeof page.$x !== 'function') {
+        // console.error(`Session ${sessionId}: Invalid page object.`);
+        return false;
+    }
+
     try {
-        // Look for the message on the page
-        const signInPrompt = await page.$x("//yt-formatted-string[contains(text(), 'Sign in to confirm you’re not a bot')]");
-        if (signInPrompt.length > 0) {
-            console.log('Detected "Sign in to confirm you’re not a bot" prompt. Closing browser.');
-            await browser.close(); // Close the browser
+        // console.log(`Session ${sessionId}: Checking for "Sign in to confirm you’re not a bot" prompt...`);
+        const [signInPrompt] = await page.$x("//yt-formatted-string[contains(text(), \"Sign in to confirm you’re not a bot\")]");
+        if (signInPrompt) {
+            console.log(`Session ${sessionId}: Detected "Sign in to confirm you’re not a bot" prompt.`);
             return true;
         }
     } catch (error) {
-        console.error('Error checking for sign-in prompt:', error.message);
+        console.error(`Session ${sessionId}: Error checking for sign-in prompt:`, error.message);
     }
     return false;
 }
 
-async function ensureVideoPlaying(page, sessionId) {
-    // Check if the play button is in "Pause" state
-    const isPaused = await page.evaluate(() => {
+async function checkifYoutubeVideoIsPlaying(page, sessionId) {
+    const isPlaying = await page.evaluate(() => {
         const playButton = document.querySelector('.ytp-play-button');
-        return playButton?.getAttribute('data-title-no-tooltip') === 'Pause';
+        const hasPause = playButton?.getAttribute('data-title-no-tooltip') === 'Pause';
+        if (playButton && hasPause) {
+            return true;
+        } else {
+            return false;
+        }
     });
+    return isPlaying;
+}
+
+async function ensureVideoPlaying(page, sessionId) {
+    await page.mouse.move(Math.random() * 1000, Math.random() * 800, { steps: 10 });
+    // delay to wait for the video to start
+    await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
+
+    // Check if the play button is in "Pause" state
+    const isPlaying = await checkifYoutubeVideoIsPlaying(page, sessionId);
 
     // If not in "Pause" state, click the button to play the video
-    if (!isPaused) {
+    if (!isPlaying) {
         console.log(`Session ${sessionId}: Video is not playing. Clicking the play button to start the video.`);
+
         // const playButton = await page.$('.ytp-play-button'); // Select the play button
         // if (playButton) {
         //     await playButton.click(); // Click the button
         // } else {
         //     console.log(`Session ${sessionId}: Play button not found.`);
         // }
-        await page.waitForSelector('.ytp-play-button', { visible: true });
 
+        await page.waitForSelector('.ytp-play-button', { visible: true });
         try {
+
+            // close ads first
             await page.evaluate(() => {
                 const overlay = document.querySelector('.ytp-ad-overlay-close-button');
                 if (overlay) overlay.click();
             });
+
             await page.evaluate(() => {
-                document.querySelector('.ytp-play-button').scrollIntoView();
+                const playButton = document.querySelector('.ytp-play-button');
+                if (playButton) playButton.click();
+                // document.querySelector('.ytp-play-button').scrollIntoView();
             });
-            await page.click('.ytp-play-button');
-            console.log(`Session ${sessionId}: Video is now playing.`);
+            // await page.click('.ytp-play-button');
+            // console.log(`Session ${sessionId}: Video is now playing.`);
         } catch (error) {
             console.error(`Session ${sessionId}: Error clicking play button:`, error.message);
-
             // Retry with evaluate
             await page.evaluate(() => {
                 document.querySelector('.ytp-play-button').click();
             });
         }
     } else {
-        console.log(`Session ${sessionId}: Video is already playing.`);
+        // console.log(`Session ${sessionId}: Video is already playing.`);
     }
 }
 
-async function clickRejectAllButtonIfExists(page) {
+async function clickRejectAllButtonIfExists(page, sessionId) {
     const rejectAllButton = await page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         return buttons.find(button => button.textContent.trim() === 'Reject all');
     });
 
     if (rejectAllButton) {
-        console.log('The "Reject all" button is present. Clicking it.');
+        console.log(`Session ${sessionId}: The "Reject all" button is present. Clicking it.`);
         await page.evaluate(() => {
             const button = Array.from(document.querySelectorAll('button'))
                 .find(button => button.textContent.trim() === 'Reject all');
             button.click();
         });
     } else {
-        console.log('The "Reject all" button is not present.');
+        // console.log('The "Reject all" button is not present.');
     }
 }
 
@@ -238,7 +287,6 @@ async function automateYouTube(torInstance, sessionId) {
 
     // Request a unique Tor IP
     const newIp = await requestUniqueTorIp(torInstance, sessionId);
-    console.log(`Session ${sessionId}: Using unique Tor IP: ${newIp}`);
 
     // Launch Puppeteer with Tor proxy
     const browser = await puppeteer.launch({
@@ -269,10 +317,10 @@ async function automateYouTube(torInstance, sessionId) {
         ];
         await page.setUserAgent(userAgents[Math.floor(Math.random() * userAgents.length)]);
 
-        let headers = {
-            'Referer': faker.internet.url(),
-            'Origin': faker.internet.url(),
-        };
+        // let headers = {
+        //     'Referer': faker.internet.url(),
+        //     'Origin': faker.internet.url(),
+        // };
         // console.log(headers);        
         // await page.setExtraHTTPHeaders(headers);
 
@@ -286,13 +334,18 @@ async function automateYouTube(torInstance, sessionId) {
 
         // Open YouTube channel
         console.log(`Session ${sessionId}: Opening YouTube Video`);
-        await page.goto(YOUTUBE_URL, { waitUntil: 'load', timeout: 60000 });
+        await page.goto(YOUTUBE_URL, { waitUntil: 'domcontentloaded' });
 
+        // Check for specific issues (e.g., CAPTCHA)
+        const captchaDetected = await page.evaluate(() => !!document.querySelector('#captcha-container'));
+        if (captchaDetected) {
+            throw new Error('CAPTCHA detected. Manual intervention required.');
+        }
         // Detect and click the "Reject all" button if it exists
-        await clickRejectAllButtonIfExists(page);
+        await clickRejectAllButtonIfExists(page, sessionId);
 
         // Check for sign-in prompt
-        const isSignInRequired = await checkForSignInPrompt(page, browser);
+        const isSignInRequired = await checkForSignInPrompt(page, sessionId);
         if (isSignInRequired) return;
 
         // Handle ads (if any)
@@ -302,42 +355,44 @@ async function automateYouTube(torInstance, sessionId) {
             await page.waitForTimeout(1000); // Wait for the video to start
         }
 
-        // Wait for the play button to appear
-        await page.waitForSelector('.ytp-play-button', { timeout: 60000 });
-
-        await setLowestVideoQuality(page, sessionId);
-
         // Ensure the video is playing
         await ensureVideoPlaying(page, sessionId);
+        let isPlaying = await checkifYoutubeVideoIsPlaying(page, sessionId);
 
-        // Simulate interaction for 30 seconds
-        console.log(`Session ${sessionId}: Watching video for 30 seconds`);
-        for (let i = 0; i < FLOOR(WATCH_TIME_SEC / 5); i++) {
-            try {
+        if (!isPlaying) {
+            console.log(`Session ${sessionId}: Video is not playing. Exiting...`);
+        } else {
+            await setLowestVideoQuality(page, sessionId);
 
-                // Scroll the page every 10 seconds
-                if (i % 3 === 0 && i !== 0) {
-                    await page.mouse.move(Math.random() * 1000, Math.random() * 800, { steps: 10 });
-                    console.log(`Session ${sessionId}: Scrolling page at iteration ${i}`);
-                    await page.evaluate(() => window.scrollBy(0, 100));
+            // Simulate interaction for 30 seconds
+            console.log(`Session ${sessionId}: Watching video for ${WATCH_TIME_SEC} seconds`);
+            for (var i = 0; i < Math.floor(WATCH_TIME_SEC / 5); i++) {
+                try {
+                    // Scroll the page every 10 seconds
+                    if (i % 3 === 0 && i !== 0) {
+                        await page.mouse.move(Math.random() * 1000, Math.random() * 800, { steps: 10 });
+                        // console.log(`Session ${sessionId}: Scrolling page at iteration ${i}`);
+                        await page.evaluate(() => window.scrollBy(0, 100));
+                    }
+
+                    // Enable network throttling at the beginning
+                    if (i === 5) {
+                        // console.log(`Session ${sessionId}: Enabling network throttling`);
+                        // await enableNetworkThrottling(page);
+                    }
+
+                    // Log progress every 5 seconds
+                    let progress = Math.ceil((i + 1) * 5 / WATCH_TIME_SEC * 100);
+                    console.log(`Session ${sessionId}: ${progress}%`);
+                    await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
+                } catch (error) {
+                    console.error(`Session ${sessionId}: Error during interaction simulation at iteration ${i + 1}: ${error.message}`);
+                    break; // Exit loop if an error occurs
                 }
-
-                // Enable network throttling at the beginning
-                if (i === 5) {
-                    // console.log(`Session ${sessionId}: Enabling network throttling`);
-                    // await enableNetworkThrottling(page);
-                }
-
-                // Log progress every 5 seconds
-                console.log(`Session ${sessionId}: Simulating interaction, iteration ${i + 1}`);
-                await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
-            } catch (error) {
-                console.error(`Session ${sessionId}: Error during interaction simulation at iteration ${i + 1}: ${error.message}`);
-                break; // Exit loop if an error occurs
             }
-        }
 
-        console.log(`Session ${sessionId}: Finished watching video.`);
+            console.log(`Session ${sessionId}: TOTAL WATCH TIME: ${i * 5} seconds`);
+        }
 
     } catch (err) {
         console.error(`Session ${sessionId}: Error: ${err.message}`);
@@ -472,6 +527,9 @@ async function automateYouTubeChannel(torInstance, sessionId) {
         console.error(`Session ${sessionId}: Error: ${err.message}`);
     } finally {
         // save screenshot
+        await page.evaluate(() => {
+            window.scrollTo(0, 0);
+        });
         await takeScreenshot(page, `screenshot-${sessionId}.png`);
         console.log(`Session ${sessionId}: Screenshot saved.`);
 
@@ -529,7 +587,7 @@ async function deleteScreenshots() {
 
             // Introduce a 5-second delay before starting the next session
             if (index < torInstances.length - 1) {
-                console.log('Waiting 10 seconds before starting the next session...');
+                // console.log('Waiting 5 seconds before starting the next session...');
                 await new Promise(resolve => setTimeout(resolve, 5000)); // 5-second delay
             }
         }

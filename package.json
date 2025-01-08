@@ -9,7 +9,6 @@
     "author": "Your Name",
     "license": "MIT",
     "dependencies": {
-        "@faker-js/faker": "^9.3.0",
         "axios": "^1.7.9",
         "puppeteer": "^23.11.1",
         "puppeteer-extra": "^3.3.6",
