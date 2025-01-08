@@ -1,8 +1,12 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const TorControl = require('tor-control');
 const axios = require('axios');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const { faker } = require('@faker-js/faker');
+
+// Add the stealth plugin to Puppeteer Extra
+puppeteer.use(StealthPlugin());
 
 // Configuration
 // get values from env of docker
@@ -92,7 +96,7 @@ async function getTorIp(torInstance, sessionId) {
         return torIp;
     } catch (error) {
         console.error(`Session ${sessionId}: Failed to get Tor IP: ${error.message}`);
-        throw error;
+        return sessionId + '.0.0.' + Math.floor(Math.random() * 254); // Return a default IP
     }
 }
 
@@ -179,11 +183,31 @@ async function ensureVideoPlaying(page, sessionId) {
     // If not in "Pause" state, click the button to play the video
     if (!isPaused) {
         console.log(`Session ${sessionId}: Video is not playing. Clicking the play button to start the video.`);
-        const playButton = await page.$('.ytp-play-button'); // Select the play button
-        if (playButton) {
-            await playButton.click(); // Click the button
-        } else {
-            console.log(`Session ${sessionId}: Play button not found.`);
+        // const playButton = await page.$('.ytp-play-button'); // Select the play button
+        // if (playButton) {
+        //     await playButton.click(); // Click the button
+        // } else {
+        //     console.log(`Session ${sessionId}: Play button not found.`);
+        // }
+        await page.waitForSelector('.ytp-play-button', { visible: true });
+
+        try {
+            await page.evaluate(() => {
+                const overlay = document.querySelector('.ytp-ad-overlay-close-button');
+                if (overlay) overlay.click();
+            });
+            await page.evaluate(() => {
+                document.querySelector('.ytp-play-button').scrollIntoView();
+            });
+            await page.click('.ytp-play-button');
+            console.log(`Session ${sessionId}: Video is now playing.`);
+        } catch (error) {
+            console.error(`Session ${sessionId}: Error clicking play button:`, error.message);
+
+            // Retry with evaluate
+            await page.evaluate(() => {
+                document.querySelector('.ytp-play-button').click();
+            });
         }
     } else {
         console.log(`Session ${sessionId}: Video is already playing.`);
@@ -221,12 +245,19 @@ async function automateYouTube(torInstance, sessionId) {
         args: [
             `--proxy-server=socks5://${TOR_HOST}:${torInstance.proxyPort}`,
             '--no-sandbox',
+            '--disable-dev-shm-usage',
             '--disable-setuid-sandbox',
             '--disable-blink-features=AutomationControlled', // Avoid detection as automation
         ],
+        protocolTimeout: 60000, // Increase to 60 seconds (or longer if needed)
     });
 
     const page = await browser.newPage();
+
+    // Enable dark mode
+    await page.emulateMediaFeatures([
+        { name: 'prefers-color-scheme', value: 'dark' },
+    ]);
 
     try {
         // Set a random user-agent
@@ -246,11 +277,15 @@ async function automateYouTube(torInstance, sessionId) {
 
         await page.evaluateOnNewDocument(() => {
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3],
+            });
         });
 
         // Open YouTube channel
         console.log(`Session ${sessionId}: Opening YouTube Video`);
-        await page.goto(YOUTUBE_URL, { waitUntil: 'domcontentloaded' });
+        await page.goto(YOUTUBE_URL, { waitUntil: 'load', timeout: 60000 });
 
         // Detect and click the "Reject all" button if it exists
         await clickRejectAllButtonIfExists(page);
@@ -267,7 +302,7 @@ async function automateYouTube(torInstance, sessionId) {
         }
 
         // Wait for the play button to appear
-        await page.waitForSelector('.ytp-play-button', { timeout: 10000 });
+        await page.waitForSelector('.ytp-play-button', { timeout: 60000 });
 
         await setLowestVideoQuality(page, sessionId);
 
@@ -278,10 +313,10 @@ async function automateYouTube(torInstance, sessionId) {
         console.log(`Session ${sessionId}: Watching video for 30 seconds`);
         for (let i = 0; i < 7; i++) {
             try {
-                await page.mouse.move(Math.random() * 1000, Math.random() * 800, { steps: 10 });
 
                 // Scroll the page every 10 seconds
                 if (i % 3 === 0 && i !== 0) {
+                    await page.mouse.move(Math.random() * 1000, Math.random() * 800, { steps: 10 });
                     console.log(`Session ${sessionId}: Scrolling page at iteration ${i}`);
                     await page.evaluate(() => window.scrollBy(0, 100));
                 }
@@ -447,7 +482,12 @@ async function automateYouTubeChannel(torInstance, sessionId) {
 async function takeScreenshot(page, filename) {
     if (!page.isClosed()) {
         try {
-            await page.screenshot({ path: 'screenshots/' + filename });
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 seconds before the screenshot
+            try {
+                await page.screenshot({ path: `screenshots/${filename}` });
+            } catch (error) {
+                console.error('Screenshot failed:', error.message);
+            }
         } catch (error) {
             console.error('Screenshot failed:', error.message);
         }
@@ -456,8 +496,25 @@ async function takeScreenshot(page, filename) {
     }
 }
 
+async function deleteScreenshots() {
+    const fs = require('fs');
+    const path = require('path');
+    const directory = 'screenshots';
+
+    fs.readdir(directory, (err, files) => {
+        if (err) throw err;
+
+        for (const file of files) {
+            fs.unlink(path.join(directory, file), err => {
+                if (err) throw err;
+            });
+        }
+    });
+}
+
 // Start sessions with a 5-second delay between each
 (async () => {
+    deleteScreenshots(); // Delete existing screenshots
     // loop through the number of reruns
     for (let idx_rerun = 0; idx_rerun < RERUN_TIMES; idx_rerun++) {
 

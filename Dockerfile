@@ -1,8 +1,13 @@
-# Start with your base image
-FROM node:20-bullseye
+FROM ubuntu:20.04
 
-# Install necessary dependencies for Puppeteer
+# Set environment variable to avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies
 RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    gnupg \
     libnss3 \
     libatk-bridge2.0-0 \
     libx11-xcb1 \
@@ -16,34 +21,47 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     libcups2 \
     fonts-liberation \
-    # libjpeg-turbo8 \
-    libx11-6 \
-    libxext6 \
-    libxrender1 \
-    libxrandr2 \
-    libxcb1 \
+    ttf-mscorefonts-installer \
     libxfixes3 \
-    libxinerama1 \
     libxkbcommon0 \
+    libpango1.0-0 \
     libcairo2 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libdbus-1-3 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    unzip \
+    tor \
+    telnet \
+    iputils-ping \
+    net-tools \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy package.json and install dependencies
+# Install Chrome for Testing
+RUN mkdir -p /opt/google/chrome/ && \
+    wget https://storage.googleapis.com/chrome-for-testing-public/131.0.6778.264/linux64/chrome-linux64.zip && \
+    unzip chrome-linux64.zip -d /opt/google/chrome/ && \
+    rm chrome-linux64.zip && \
+    chmod +x /opt/google/chrome/chrome-linux64/chrome && \
+    ln -s /opt/google/chrome/chrome-linux64/chrome /usr/bin/google-chrome
+
+# Verify Chrome installation
+RUN google-chrome --version
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set Puppeteer to use Chrome for Testing
+ENV PUPPETEER_EXECUTABLE_PATH="/opt/google/chrome/chrome-linux64/chrome"
+
+# Install Puppeteer and other required Node.js packages
+WORKDIR /usr/src/app
 COPY package*.json ./
 RUN npm install
 
-# Set Puppeteer to use installed Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-
-# Set working directory
-WORKDIR /usr/src/app
-
-# Copy project files
+# Copy the application code
 COPY . .
+
+# Expose ports for Tor
+EXPOSE 9050 9051
 
 # Start the application
 CMD ["node", "script.js"]
