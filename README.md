@@ -37,6 +37,7 @@
     -e YOUTUBE_URL="https://www.youtube.com/watch?v=BPydARoYxa4" \
     -e RERUN_TIMES=10 \
     -e TOR_POOL_SIZE=10 \
+    -e WATCH_TIME_SEC=50 \
     -v $(pwd)/screenshots:/usr/src/app/screenshots \
     pjabadesco/docker-yt-tor bash
 

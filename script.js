@@ -19,6 +19,7 @@ const YOUTUBE_CHANNEL_URL = String(process.env.YOUTUBE_CHANNEL_URL) || 'https://
 const YOUTUBE_URL = String(process.env.YOUTUBE_URL) || 'https://www.youtube.com/watch?v=BPydARoYxa4';
 const RERUN_TIMES = parseInt(process.env.RERUN_TIMES, 10) || 10;
 const TOR_POOL_SIZE = parseInt(process.env.TOR_POOL_SIZE, 10) || 10; // Number of Tor instances in the pool
+const WATCH_TIME_SEC = parseInt(process.env.WATCH_TIME_SEC, 50) || 10; // Number of Tor instances in the pool
 
 // Create a pool of Tor instances
 const torInstances = Array.from({ length: TOR_POOL_SIZE }, (_, index) => ({
@@ -311,7 +312,7 @@ async function automateYouTube(torInstance, sessionId) {
 
         // Simulate interaction for 30 seconds
         console.log(`Session ${sessionId}: Watching video for 30 seconds`);
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < FLOOR(WATCH_TIME_SEC / 5); i++) {
             try {
 
                 // Scroll the page every 10 seconds
